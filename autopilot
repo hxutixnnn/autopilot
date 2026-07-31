@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Thin, relocation-safe entry point for the Autopilot repo-as-distro.
+set -eu
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -L "$SOURCE" ]; do
+  SOURCE_DIR=$(CDPATH='' cd -P -- "$(dirname -- "$SOURCE")" && pwd)
+  TARGET=$(readlink "$SOURCE")
+  case "$TARGET" in
+    /*) SOURCE=$TARGET ;;
+    *) SOURCE=$SOURCE_DIR/$TARGET ;;
+  esac
+done
+AP_ROOT=$(CDPATH='' cd -P -- "$(dirname -- "$SOURCE")" && pwd)
+
+usage() {
+  cat <<'EOF'
+Usage:
+  autopilot launch <claude|codex|opencode|pi|pi-signed|grok|kimi> [arguments...]
+  autopilot update
+  autopilot --help
+
+Launch a supported agent harness in the Autopilot distro, or run its guarded
+fast-forward-only self-update. The command may be symlinked into PATH; it always
+resolves the tracked repository that owns it.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help|help)
+    usage
+    ;;
+  update)
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    exec env AP_ROOT_OVERRIDE="$AP_ROOT" "$AP_ROOT/bin/ap-update.sh"
+    ;;
+  launch)
+    shift
+    harness=${1:-}
+    [ -n "$harness" ] || { echo "autopilot: launch requires a harness" >&2; usage >&2; exit 2; }
+    shift
+    case "$harness" in
+      claude|codex|opencode|pi|pi-signed|grok|kimi) ;;
+      *) echo "autopilot: unsupported harness: $harness" >&2; usage >&2; exit 2 ;;
+    esac
+    cd "$AP_ROOT"
+    exec "$harness" "$@"
+    ;;
+  '')
+    usage
+    ;;
+  *)
+    echo "autopilot: unknown command: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

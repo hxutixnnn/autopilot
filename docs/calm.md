@@ -1,25 +1,25 @@
 # Pi Calm mode
 
 Calm is a Pi-only conversation presentation toggle.
-It is off by default, and the last `/calm` choice persists for the effective Firstmate home across Pi session starts and resumes.
+It is off by default, and the last `/calm` choice persists for the effective Autopilot home across Pi session starts and resumes.
 
-While Calm is active and an agent run is under way, Calm hides Pi's built-in `Working...` row and shows a small two-row animated boat in its place, and no separate Calm status row is added.
-The water fills the usable width in standard ANSI blue and the complete boat is standard ANSI yellow.
-The boat is deliberately calm: it moves one column every 880ms, while the water ripples on its own faster cadence so the surface stays alive between boat steps.
-Its mainsail is directional, showing `<|` while travelling right and `|>` while travelling left, and it flips on the exact frame the boat turns at either edge.
+While Calm is active and an agent run is under way, Calm hides Pi's built-in `Working...` row and shows a small two-row animated airplane in its place, and no separate Calm status row is added.
+The sky fills the usable width in standard ANSI blue and the complete airplane is standard ANSI yellow.
+The airplane is deliberately calm: it moves one column every 880ms, while the sky ripples on its own faster cadence so the surface stays alive between airplane steps.
+Its nose is directional, showing `<|` while travelling right and `|>` while travelling left, and it flips on the exact frame the airplane turns at either edge.
 Every resize reflows the sprite without wrapping, and it disappears when the run settles, aborts, or fails.
-Within one Pi session and Calm extension lifetime, the next working period resumes the boat from its last rendered column and travel direction rather than restarting at the left edge.
-Hidden elapsed time does not advance the animation, and a resize while hidden clamps the frozen boat to the new width without changing its valid travel direction.
+Within one Pi session and Calm extension lifetime, the next working period resumes the airplane from its last rendered column and travel direction rather than restarting at the left edge.
+Hidden elapsed time does not advance the animation, and a resize while hidden clamps the frozen airplane to the new width without changing its valid travel direction.
 A fresh Pi session or new Calm extension lifetime starts at the normal initial position.
 Very narrow terminals fall back to a smaller deterministic sprite.
 While Calm is off, Pi's stock working row is left exactly as Pi renders it.
-Calm hides collapsed thinking labels, the shells for Pi's seven built-in tools, the `fm_watch_arm_pi` tool shell, and canonically classified Firstmate operational user rows.
+Calm hides collapsed thinking labels, the shells for Pi's seven built-in tools, the `ap_watch_arm_pi` tool shell, and canonically classified Autopilot operational user rows.
 The operational inputs remain ordinary user-role messages, while Pi's transcript layout renders their complete rows at zero height.
 The session-start nudge remains on its existing non-displayed custom-message path.
 
 Calm changes presentation only.
 Tool execution, input delivery, ordering, model context, session storage, diagnostics, and `/export` and `/share` operation remain unchanged.
-Every hidden Firstmate input remains available to the model and in serialized session data and exported artifacts.
+Every hidden Autopilot input remains available to the model and in serialized session data and exported artifacts.
 Legacy operational custom messages remain in session data and Pi's sidebar tree, although the main HTML transcript may omit them.
 Toggling Calm off restores ordinary rendering, and `Ctrl+O` expansion state is preserved.
 
@@ -35,12 +35,12 @@ If Pi removes one of those seams, Calm logs a diagnostic naming the unavailable 
 
 [`calm-mode-feasibility.md`](calm-mode-feasibility.md) owns the version-scoped renderer taxonomy and empirical evidence.
 [`configuration.md`](configuration.md#pi-calm-preference-configcalm) owns the persisted preference file and resolution rules.
-`.pi/extensions/lib/fm-calm-visibility.ts` owns the visibility policy, `.pi/extensions/lib/fm-calm-operational-user-layout.ts` owns the zero-height operational-user row adapter, and `.pi/extensions/lib/fm-calm-working-ship.ts` owns the animated working presentation.
+`.pi/extensions/lib/ap-calm-visibility.ts` owns the visibility policy, `.pi/extensions/lib/ap-calm-operational-user-layout.ts` owns the zero-height operational-user row adapter, and `.pi/extensions/lib/ap-calm-working-flight.ts` owns the animated working presentation.
 
 Regression entry points:
 
 ```sh
-tests/fm-calm-pi-extension.test.sh
-tests/fm-pi-primary-types.test.sh
-FM_PI_LIVE_E2E=1 tests/fm-pi-primary-live-e2e.test.sh
+tests/ap-calm-pi-extension.test.sh
+tests/ap-pi-primary-types.test.sh
+AP_PI_LIVE_E2E=1 tests/ap-pi-primary-live-e2e.test.sh
 ```

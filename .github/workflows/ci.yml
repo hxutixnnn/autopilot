@@ -18,11 +18,11 @@ jobs:
       - name: Install pinned ShellCheck
         run: |
           set -eu
-          bin/fm-install-shellcheck.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-shellcheck.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       # Single owner of the lint definition (file set + config + version). Do not
       # re-spell the shellcheck command here; keep CI and the pre-push gate on it.
-      - run: bin/fm-lint.sh
+      - run: bin/ap-lint.sh
 
   # Deterministic proof that portable parallel shards + portable serial + Herdr
   # equal the complete tests/*.test.sh inventory with no missing or duplicates.
@@ -32,10 +32,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Prove complete regression partition
-        run: bin/fm-test-run.sh --check-coverage
+        run: bin/ap-test-run.sh --check-coverage
 
   # Two duration-balanced portable parallel shards of the Phase 2 proven-isolated
-  # set only. Composition owner: bin/fm-test-run.sh (docs/fm-test-portable-shards.md).
+  # set only. Composition owner: bin/ap-test-run.sh (docs/ap-test-portable-shards.md).
   tests-portable-parallel-1:
     name: Behavior portable parallel 1
     runs-on: ubuntu-latest
@@ -49,7 +49,7 @@ jobs:
       - name: Install pinned ShellCheck
         run: |
           set -eu
-          bin/fm-install-shellcheck.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-shellcheck.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Install tasks-axi
         run: |
@@ -59,15 +59,15 @@ jobs:
       - name: Run portable parallel shard 1
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-test"
-          bin/fm-test-run.sh --lane portable-parallel-1 \
-            --json "$RUNNER_TEMP/fm-test/fm-test-timing-portable-parallel-1.json"
+          mkdir -p "$RUNNER_TEMP/ap-test"
+          bin/ap-test-run.sh --lane portable-parallel-1 \
+            --json "$RUNNER_TEMP/ap-test/ap-test-timing-portable-parallel-1.json"
       - name: Upload shard 1 timing artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fm-test-timing-portable-parallel-1
-          path: ${{ runner.temp }}/fm-test/fm-test-timing-portable-parallel-1.json
+          name: ap-test-timing-portable-parallel-1
+          path: ${{ runner.temp }}/ap-test/ap-test-timing-portable-parallel-1.json
           if-no-files-found: warn
 
   tests-portable-parallel-2:
@@ -81,7 +81,7 @@ jobs:
       - name: Install pinned ShellCheck
         run: |
           set -eu
-          bin/fm-install-shellcheck.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-shellcheck.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Install tasks-axi
         run: |
@@ -91,15 +91,15 @@ jobs:
       - name: Run portable parallel shard 2
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-test"
-          bin/fm-test-run.sh --lane portable-parallel-2 \
-            --json "$RUNNER_TEMP/fm-test/fm-test-timing-portable-parallel-2.json"
+          mkdir -p "$RUNNER_TEMP/ap-test"
+          bin/ap-test-run.sh --lane portable-parallel-2 \
+            --json "$RUNNER_TEMP/ap-test/ap-test-timing-portable-parallel-2.json"
       - name: Upload shard 2 timing artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fm-test-timing-portable-parallel-2
-          path: ${{ runner.temp }}/fm-test/fm-test-timing-portable-parallel-2.json
+          name: ap-test-timing-portable-parallel-2
+          path: ${{ runner.temp }}/ap-test/ap-test-timing-portable-parallel-2.json
           if-no-files-found: warn
 
   # Required portable serial remainder: watcher, lock, AFK, tmux, daemon,
@@ -118,7 +118,7 @@ jobs:
       - name: Install pinned ShellCheck
         run: |
           set -eu
-          bin/fm-install-shellcheck.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-shellcheck.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Require tmux for e2e tests
         run: |
@@ -136,15 +136,15 @@ jobs:
       - name: Run portable serial remainder
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-test"
-          bin/fm-test-run.sh --lane portable-serial \
-            --json "$RUNNER_TEMP/fm-test/fm-test-timing-portable-serial.json"
+          mkdir -p "$RUNNER_TEMP/ap-test"
+          bin/ap-test-run.sh --lane portable-serial \
+            --json "$RUNNER_TEMP/ap-test/ap-test-timing-portable-serial.json"
       - name: Upload portable serial timing artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fm-test-timing-portable-serial
-          path: ${{ runner.temp }}/fm-test/fm-test-timing-portable-serial.json
+          name: ap-test-timing-portable-serial
+          path: ${{ runner.temp }}/ap-test/ap-test-timing-portable-serial.json
           if-no-files-found: warn
 
   # Required real-Herdr lane: pinned install, serial real-herdr-gated family,
@@ -173,14 +173,14 @@ jobs:
       - name: Install pinned Herdr
         run: |
           set -eu
-          bin/fm-install-herdr.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-herdr.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Install pinned Treehouse
         run: |
           set -eu
           # Several real-herdr-gated E2E scripts require treehouse for spawn
           # worktree acquisition (presentation, workspace-per-home, autodetect).
-          bin/fm-install-treehouse.sh "$RUNNER_TEMP/bin"
+          bin/ap-install-treehouse.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Assert Herdr pin and protocol floor
         run: |
@@ -209,10 +209,10 @@ jobs:
           set -eu
           # Lab provision requires exactly one running default session so the
           # default-session tripwire can arm. Start it headless; never use it
-          # for lab work (tests still refuse default and use fm-lab-* only).
-          mkdir -p "$RUNNER_TEMP/fm-herdr"
-          nohup herdr server >"$RUNNER_TEMP/fm-herdr/default-server.log" 2>&1 &
-          echo $! >"$RUNNER_TEMP/fm-herdr/default-server.pid"
+          # for lab work (tests still refuse default and use ap-lab-* only).
+          mkdir -p "$RUNNER_TEMP/ap-herdr"
+          nohup herdr server >"$RUNNER_TEMP/ap-herdr/default-server.log" 2>&1 &
+          echo $! >"$RUNNER_TEMP/ap-herdr/default-server.pid"
           attempt=0
           while [ "$attempt" -lt 150 ]; do
             running=$(herdr status --json 2>/dev/null | jq -r '.server.running // false' || echo false)
@@ -228,27 +228,27 @@ jobs:
             attempt=$((attempt + 1))
           done
           echo "::error::default Herdr server did not become ready"
-          cat "$RUNNER_TEMP/fm-herdr/default-server.log" || true
+          cat "$RUNNER_TEMP/ap-herdr/default-server.log" || true
           exit 1
       - name: Snapshot pre-suite Herdr sessions
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-herdr"
-          bin/fm-herdr-ci-cleanup.sh snapshot "$RUNNER_TEMP/fm-herdr/sessions-before.json"
+          mkdir -p "$RUNNER_TEMP/ap-herdr"
+          bin/ap-herdr-ci-cleanup.sh snapshot "$RUNNER_TEMP/ap-herdr/sessions-before.json"
       - name: Run real-Herdr family (serial, required)
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-test"
+          mkdir -p "$RUNNER_TEMP/ap-test"
           # Serial only. Fail if any script reports herdr not found. Live
           # harness credential tests stay outside this family (opt-in env only).
-          bin/fm-test-run.sh --family real-herdr-gated \
+          bin/ap-test-run.sh --family real-herdr-gated \
             --fail-on-gate-skip 'herdr not found' \
-            --json "$RUNNER_TEMP/fm-test/fm-test-timing-herdr.json"
+            --json "$RUNNER_TEMP/ap-test/ap-test-timing-herdr.json"
       - name: Cleanup job-owned Herdr lab sessions
         if: always()
         run: |
           set -eu
-          bin/fm-herdr-ci-cleanup.sh teardown "$RUNNER_TEMP/fm-herdr/sessions-before.json" || {
+          bin/ap-herdr-ci-cleanup.sh teardown "$RUNNER_TEMP/ap-herdr/sessions-before.json" || {
             echo "::warning::lab session cleanup reported a problem; see logs"
             # Surface diagnostics without weakening the suite result above.
             herdr session list --json || true
@@ -258,11 +258,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fm-test-timing-herdr
+          name: ap-test-timing-herdr
           path: |
-            ${{ runner.temp }}/fm-test/fm-test-timing-herdr.json
-            ${{ runner.temp }}/fm-herdr/sessions-before.json
-            ${{ runner.temp }}/fm-herdr/default-server.log
+            ${{ runner.temp }}/ap-test/ap-test-timing-herdr.json
+            ${{ runner.temp }}/ap-herdr/sessions-before.json
+            ${{ runner.temp }}/ap-herdr/default-server.log
           if-no-files-found: warn
 
   # Aggregate per-lane timing into one summary artifact for critical-path review.
@@ -280,28 +280,28 @@ jobs:
       - name: Download lane timing artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: fm-test-timing-*
-          path: ${{ runner.temp }}/fm-test-aggregate
+          pattern: ap-test-timing-*
+          path: ${{ runner.temp }}/ap-test-aggregate
           merge-multiple: true
       - name: Build aggregate timing summary
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/fm-test"
+          mkdir -p "$RUNNER_TEMP/ap-test"
           shopt -s nullglob
-          inputs=("$RUNNER_TEMP"/fm-test-aggregate/fm-test-timing-*.json)
+          inputs=("$RUNNER_TEMP"/ap-test-aggregate/ap-test-timing-*.json)
           if [ "${#inputs[@]}" -eq 0 ]; then
             echo "::warning::no per-lane timing JSON found to aggregate"
             exit 0
           fi
-          bin/fm-test-run.sh --aggregate-json \
-            "$RUNNER_TEMP/fm-test/fm-test-timing-aggregate.json" \
+          bin/ap-test-run.sh --aggregate-json \
+            "$RUNNER_TEMP/ap-test/ap-test-timing-aggregate.json" \
             "${inputs[@]}"
       - name: Upload aggregate timing artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fm-test-timing-aggregate
-          path: ${{ runner.temp }}/fm-test/fm-test-timing-aggregate.json
+          name: ap-test-timing-aggregate
+          path: ${{ runner.temp }}/ap-test/ap-test-timing-aggregate.json
           if-no-files-found: warn
 
   macos-stock-bash:
@@ -323,15 +323,15 @@ jobs:
           /bin/bash --version | head -1
           command -v jq >/dev/null || { echo "::error::jq is required"; exit 1; }
 
-          shell_inventory="$RUNNER_TEMP/fm-shell-inventory"
-          bin/fm-lint.sh --list-files > "$shell_inventory"
+          shell_inventory="$RUNNER_TEMP/ap-shell-inventory"
+          bin/ap-lint.sh --list-files > "$shell_inventory"
           parse_fail=0
           while IFS= read -r f; do
             /bin/bash -n "$f" || { echo "::error::stock macOS Bash 3.2 failed to parse $f"; parse_fail=1; }
           done < "$shell_inventory"
           [ "$parse_fail" -eq 0 ] || { echo "::error::stock macOS Bash 3.2 parse sweep failed"; exit 1; }
 
-          snapshot_output=$(/bin/bash tests/fm-fleet-snapshot-view.test.sh)
+          snapshot_output=$(/bin/bash tests/ap-fleet-snapshot-view.test.sh)
           printf '%s\n' "$snapshot_output"
           snapshot_count=$(printf '%s\n' "$snapshot_output" | grep -c '^ok - ')
           [ "$snapshot_count" -eq 15 ] || {
@@ -339,7 +339,7 @@ jobs:
             exit 1
           }
 
-          bearings_output=$(/bin/bash tests/fm-bearings-snapshot.test.sh)
+          bearings_output=$(/bin/bash tests/ap-bearings-snapshot.test.sh)
           printf '%s\n' "$bearings_output"
           bearings_count=$(printf '%s\n' "$bearings_output" | grep -c '^ok - ')
           [ "$bearings_count" -eq 41 ] || {
