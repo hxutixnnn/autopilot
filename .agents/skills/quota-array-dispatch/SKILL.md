@@ -1,7 +1,7 @@
 ---
 name: quota-array-dispatch
 description: >-
-  Agent-only decision procedure for resolving a matched crew-dispatch profile
+  Agent-only decision procedure for resolving a matched flight-crew-dispatch profile
   array from current quota-axi output, including quota-window pace signals.
   Load when a dispatch rule or default resolves to more than one profile candidate.
 user-invocable: false
@@ -64,7 +64,7 @@ Uncertainty and ineligibility are different findings:
 - Reserve login wording for that proven-unusable case, and name the harness, model, surface, and evidence.
 
 When a credential's local classification is the only thing standing between a candidate and a block, get ground truth before blocking.
-`bin/fm-vendor-auth-probe.sh` is the only approved vendor-credential probe; its `--help` owns the registered probes and mechanics.
+`bin/ap-vendor-auth-probe.sh` is the only approved vendor-credential probe; its `--help` owns the registered probes and mechanics.
 It takes no harness, model, or provider and returns a fact, not a route: only `authenticated` and `unauthenticated` are ground truth, while `indeterminate`, `timeout`, and `unavailable` establish nothing and must never be read as either outcome.
 Never launch a vendor CLI yourself, and never probe a credential store the candidate does not use.
 
@@ -94,7 +94,7 @@ Never use pace or raw headroom to silently replace that reasoning class.
 6. If unresolved pace changes the choice, report uncertainty.
 7. Absent pace or older schema: do not crash, fabricate pace, or treat absence as healthy/`on_pace`.
    Compare raw headroom only, state pace is unavailable, and keep safety rules.
-8. Genuine ties: stop and report every tied candidate for captain choice.
+8. Genuine ties: stop and report every tied candidate for pilot choice.
    Do not select by array order, harness name, or another arbitrary identity ordering.
    Report duplicate concrete profiles as a configuration error.
 

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/fm-sessionstart-nudge.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/ap-sessionstart-nudge.sh"
           }
         ]
       }
@@ -17,11 +17,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/fm-arm-pretool-check.sh --claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/ap-arm-pretool-check.sh --claude"
           },
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/fm-cd-pretool-check.sh --claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/ap-cd-pretool-check.sh --claude"
           }
         ]
       },
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/fm-subagent-pretool-check.sh --claude"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/ap-subagent-pretool-check.sh --claude"
           }
         ]
       }
@@ -40,11 +40,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -z \"${GROK_AGENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/fm-turnend-guard.sh --claude"
+            "command": "[ -z \"${GROK_AGENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/ap-turnend-guard.sh --claude"
           },
           {
             "type": "command",
-            "command": "[ -z \"${GROK_AGENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/fm-claude-stop-autoarm.sh",
+            "command": "[ -z \"${GROK_AGENT:-}\" ] || exit 0; exec \"$CLAUDE_PROJECT_DIR\"/bin/ap-claude-stop-autoarm.sh",
             "asyncRewake": true,
             "timeout": 28800
           }

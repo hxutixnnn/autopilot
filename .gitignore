@@ -3,7 +3,7 @@ state/
 data/
 .no-mistakes/
 .lavish/
-.fm-secondmate-home
+.ap-copilot-home
 .DS_Store
 __pycache__/
 *.pyc

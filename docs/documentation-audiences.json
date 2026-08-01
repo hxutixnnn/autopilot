@@ -34,7 +34,7 @@
   ],
   "requiredOwnerPointers": [
     {
-      "source": ".agents/skills/firstmate-coding-guidelines/SKILL.md",
+      "source": ".agents/skills/autopilot-coding-guidelines/SKILL.md",
       "target": "docs/documentation-audiences.md"
     },
     {
@@ -108,7 +108,7 @@
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/ahoy/SKILL.md",
+      "path": ".agents/skills/radio-check/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -132,19 +132,15 @@
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/firstmate-codexapp/SKILL.md",
+      "path": ".agents/skills/autopilot-codexapp/SKILL.md",
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/firstmate-coding-guidelines/SKILL.md",
+      "path": ".agents/skills/autopilot-coding-guidelines/SKILL.md",
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/firstmate-orca/SKILL.md",
-      "audience": "agent-runtime"
-    },
-    {
-      "path": ".agents/skills/fmx-respond/SKILL.md",
+      "path": ".agents/skills/autopilot-orca/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -160,7 +156,7 @@
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/secondmate-provisioning/SKILL.md",
+      "path": ".agents/skills/copilot-provisioning/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -168,11 +164,11 @@
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/stuck-crewmate-recovery/SKILL.md",
+      "path": ".agents/skills/stuck-flight-crew-recovery/SKILL.md",
       "audience": "agent-runtime"
     },
     {
-      "path": ".agents/skills/updatefirstmate/SKILL.md",
+      "path": ".agents/skills/updateautopilot/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -232,7 +228,7 @@
       "audience": "maintainer-architecture"
     },
     {
-      "path": "docs/examples/crew-dispatch.json",
+      "path": "docs/examples/flight-crew-dispatch.json",
       "audience": "operator-example"
     },
     {
@@ -240,11 +236,11 @@
       "audience": "operator-example"
     },
     {
-      "path": "docs/fm-test-isolation-proof.md",
+      "path": "docs/ap-test-isolation-proof.md",
       "audience": "maintainer-verification"
     },
     {
-      "path": "docs/fm-test-portable-shards.md",
+      "path": "docs/ap-test-portable-shards.md",
       "audience": "maintainer-verification"
     },
     {
@@ -305,10 +301,6 @@
     },
     {
       "path": "docs/verification/dispatch-auth.md",
-      "audience": "maintainer-verification"
-    },
-    {
-      "path": "docs/verification/public-followup.md",
       "audience": "maintainer-verification"
     },
     {

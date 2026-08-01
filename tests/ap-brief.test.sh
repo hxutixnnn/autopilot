@@ -1,0 +1,637 @@
+#!/usr/bin/env bash
+# Behavior tests for bin/ap-brief.sh.
+#
+# Regression coverage for the heredoc-in-command-substitution parse bug (issues
+# #166, #958, #1069). Building a variable with `VAR=$(cat <<EOF ... EOF)` is
+# unsafe on Bash 3.2 (macOS /bin/bash): the lexer scans for the matching `)` of
+# the command substitution textually and tracks quote state through the heredoc
+# body, so a single apostrophe, unbalanced quote, or unbalanced paren anywhere
+# in that body breaks parsing of the *entire rest of the script* - `bash -n`
+# fails, not just the generated brief. The DOD and Herdr-section builders now
+# use `IFS= read -r -d '' VAR <<EOF || true` instead, which removes the `$(...)`
+# wrapper and eliminates the whole defect class regardless of future prose.
+# test_no_heredoc_in_command_substitution guards that structure directly.
+# Ambient `bash -n` here is Bash 5 and cannot see the bug, so the real
+# cross-version enforcement lives in the macos-stock-bash CI job.
+set -u
+
+# shellcheck source=tests/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+TMP_ROOT=$(ap_test_tmproot ap-brief)
+BRIEF_HOME="$TMP_ROOT/home"
+mkdir -p "$BRIEF_HOME/data"
+
+# The script itself must always parse under the ambient bash. That is Bash 5 in
+# CI and locally, where the issue #958/#1069 parser bug does not fire, so this
+# is a weak guard on its own; test_no_heredoc_in_command_substitution and the
+# macos-stock-bash CI job carry the real cross-version enforcement.
+test_script_parses() {
+  local out rc
+  out=$(bash -n "$ROOT/bin/ap-brief.sh" 2>&1); rc=$?
+  expect_code 0 "$rc" "bash -n bin/ap-brief.sh must parse cleanly (got: $out)"
+  [ -z "$out" ] || fail "bash -n bin/ap-brief.sh emitted unexpected output: $out"
+  pass "ap-brief.sh: bash -n succeeds"
+}
+
+# Structural class guard (issues #166, #958, #1069): never build a variable by
+# wrapping a heredoc in a command substitution (`VAR=$(cat <<EOF ... EOF)`).
+# That construct is what breaks Bash 3.2 parsing, and pinning one historical
+# apostrophe phrase (as the old test did) missed the #945 reintroduction. This
+# guards the *shape* directly against the whole file, so any future DOD or
+# section builder that reintroduces the class fails here regardless of prose.
+test_no_heredoc_in_command_substitution() {
+  local unsafe safe
+  unsafe="$TMP_ROOT/heredoc-in-substitution.sh"
+  safe="$TMP_ROOT/plain-heredoc.sh"
+  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
+  printf '%s\n' 'value=$(' '  cat <<EOF' 'body' 'EOF' ')' > "$unsafe"
+  # shellcheck disable=SC2016 # Literal shell fixtures must remain unexpanded.
+  printf '%s\n' 'cat <<EOF' '$(' '  cat <<INNER' 'INNER' ')' 'EOF' > "$safe"
+  if no_heredoc_in_command_substitution "$unsafe"; then
+    fail "structural guard accepted a multiline heredoc nested in a command substitution"
+  fi
+  no_heredoc_in_command_substitution "$safe" \
+    || fail "structural guard treated heredoc body prose as shell structure"
+  no_heredoc_in_command_substitution "$ROOT/bin/ap-brief.sh" \
+    || fail "ap-brief.sh wraps a heredoc in a command substitution (breaks Bash 3.2 parsing)"
+  pass "ap-brief.sh: no heredoc is nested inside a command substitution (Bash 3.2 parse-safe)"
+}
+
+no_heredoc_in_command_substitution() {
+  perl - "$1" <<'PERL'
+use strict;
+use warnings;
+
+my $path = shift;
+open my $source, '<', $path or die "$path: $!\n";
+my @frames;
+my @heredocs;
+my $quote = '';
+my $line_number = 0;
+
+while (my $line = <$source>) {
+  $line_number++;
+  if (@heredocs) {
+    my $candidate = $line;
+    $candidate =~ s/\r?\n\z//;
+    $candidate =~ s/^\t+// if $heredocs[0]{strip_tabs};
+    shift @heredocs if $candidate eq $heredocs[0]{delimiter};
+    next;
+  }
+
+  my $length = length $line;
+  for (my $i = 0; $i < $length; $i++) {
+    my $char = substr($line, $i, 1);
+    if ($quote eq "'") {
+      $quote = '' if $char eq "'";
+      next;
+    }
+    if ($char eq '\\') {
+      $i++;
+      next;
+    }
+    if ($quote eq '"' && $char eq '"') {
+      $quote = '';
+      next;
+    }
+    if ($char eq "'" && $quote eq '') {
+      $quote = "'";
+      next;
+    }
+    if ($char eq '"' && $quote eq '') {
+      $quote = '"';
+      next;
+    }
+    if ($char eq '#' && $quote eq '' && ($i == 0 || substr($line, $i - 1, 1) =~ /[\s;|&()]/)) {
+      last;
+    }
+    if ($char eq '$' && substr($line, $i + 1, 1) eq '(') {
+      push @frames, { depth => 1, quote => $quote };
+      $quote = '';
+      $i++;
+      next;
+    }
+    if (@frames && $quote eq '' && $char eq '(') {
+      $frames[-1]{depth}++;
+      next;
+    }
+    if (@frames && $quote eq '' && $char eq ')') {
+      $frames[-1]{depth}--;
+      if ($frames[-1]{depth} == 0) {
+        my $frame = pop @frames;
+        $quote = $frame->{quote};
+      }
+      next;
+    }
+    next unless $quote eq '' && $char eq '<' && substr($line, $i + 1, 1) eq '<';
+    if (@frames) {
+      print STDERR "$path:$line_number\n";
+      exit 1;
+    }
+
+    my $j = $i + 2;
+    my $strip_tabs = substr($line, $j, 1) eq '-';
+    $j++ if $strip_tabs;
+    $j++ while substr($line, $j, 1) =~ /[ \t]/;
+    my $delimiter = '';
+    my $delimiter_quote = '';
+    for (; $j < $length; $j++) {
+      my $token = substr($line, $j, 1);
+      if ($delimiter_quote) {
+        if ($token eq $delimiter_quote) {
+          $delimiter_quote = '';
+        } elsif ($token eq '\\' && $delimiter_quote eq '"') {
+          $j++;
+          $delimiter .= substr($line, $j, 1);
+        } else {
+          $delimiter .= $token;
+        }
+        next;
+      }
+      if ($token eq "'" || $token eq '"') {
+        $delimiter_quote = $token;
+        next;
+      }
+      if ($token eq '\\') {
+        $j++;
+        $delimiter .= substr($line, $j, 1);
+        next;
+      }
+      last if $token =~ /[\s;|&()<>]/;
+      $delimiter .= $token;
+    }
+    push @heredocs, { delimiter => $delimiter, strip_tabs => $strip_tabs };
+    $i = $j - 1;
+  }
+}
+
+exit 0;
+PERL
+}
+
+test_help_includes_entire_header() {
+  local help
+  help=$("$ROOT/bin/ap-brief.sh" --help)
+  assert_contains "$help" "Refuses to overwrite an existing brief." "ap-brief.sh --help omitted its header terminator"
+  pass "ap-brief.sh: --help renders the complete header"
+}
+
+# Registry with one project per delivery mode, so each flight-mode DOD branch is
+# exercised. A project absent from the registry defaults to no-mistakes.
+write_registry() {
+  local home=$1
+  mkdir -p "$home/data"
+  cat > "$home/data/projects.md" <<'EOF'
+- direct-proj [direct-PR] - fixture for direct-PR mode (added 2026-07-01)
+- local-proj [local-only] - fixture for local-only mode (added 2026-07-01)
+EOF
+}
+
+# ap-brief.sh must exit 0 and produce a brief with no unreplaced shell
+# metacharacter corruption for every flight delivery mode. This also guards
+# against any *new* unescaped apostrophe or unbalanced quote later added to
+# one of these DOD blocks, since a broken heredoc corrupts or empties the
+# generated brief content, not just the script's own syntax.
+test_flight_modes_generate_clean_briefs() {
+  local home id brief status
+  home="$TMP_ROOT/flight-home"
+  write_registry "$home"
+
+  for id_proj in "brief-nomistakes-a1:no-registry-proj" "brief-directpr-a2:direct-proj" "brief-localonly-a3:local-proj"; do
+    id=${id_proj%%:*}
+    proj=${id_proj##*:}
+    AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" "$proj" >/dev/null 2>&1; status=$?
+    expect_code 0 "$status" "ap-brief.sh $id $proj should exit 0"
+    brief="$home/data/$id/brief.md"
+    assert_present "$brief" "$id: brief was not scaffolded"
+    assert_grep "# Definition of done" "$brief" "$id: brief missing Definition of done section"
+    assert_grep "{TASK}" "$brief" "$id: brief missing the {TASK} placeholder"
+    assert_grep "mid-task \`working:\` line (including setup complete) is nonterminal" "$brief" \
+      "$id: brief missing nonterminal working:/setup-complete gate protection"
+    assert_no_grep "EOF" "$brief" "$id: brief leaked a heredoc EOF marker (unterminated heredoc)"
+  done
+  pass "ap-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly"
+}
+
+test_faster_paths_use_configured_authority_without_stacked_review() {
+  local home id brief
+  home="$TMP_ROOT/configured-authority-home"
+  write_registry "$home"
+  id="brief-direct-authority-a4"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" direct-proj >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_grep "The configured merge authority decides whether to merge the PR; autopilot relays the outcome." "$brief" \
+    "direct-PR brief lost configured merge authority"
+  assert_no_grep "The pilot reviews and merges the PR" "$brief" \
+    "direct-PR brief hard-coded pilot-only authority"
+  id="brief-local-authority-a4"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" local-proj >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_grep "The configured merge authority approves the ready branch, then autopilot merges it into local \`main\` through the guarded fast-forward path." "$brief" \
+    "local-only brief lost configured merge authority and guarded landing"
+  assert_no_grep "The pilot approves the ready branch" "$brief" \
+    "local-only brief hard-coded pilot-only authority"
+  assert_no_grep "Autopilot then reviews your branch diff" "$brief" \
+    "local-only brief retained a personal review stacked on the selected delivery path"
+  pass "ap-brief.sh: faster paths use configured authority without stacked review"
+}
+
+# Pin the specific line the bug lived on: the no-mistakes DOD's no-mistakes
+# reference must render as plain prose with no dangling apostrophe artifact.
+test_no_mistakes_dod_wording() {
+  local home id brief
+  home="$TMP_ROOT/wording-home"
+  mkdir -p "$home/data"
+  id="brief-wording-b1"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" some-proj >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_present "$brief" "brief was not scaffolded"
+  assert_grep "no-mistakes itself provides for the mechanics" "$brief" \
+    "no-mistakes DOD lost its guidance-reference sentence"
+  # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
+  assert_grep '`no-mistakes axi run --help`' "$brief" \
+    "no-mistakes DOD must render literal backticks around the help command"
+  # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
+  assert_grep '`help`' "$brief" \
+    "no-mistakes DOD must render literal backticks around help"
+  # The apostrophe in "autopilot's authority check" is now structurally safe
+  # (no `$(...)` wrapper around the heredoc), so it renders verbatim instead of
+  # being reworded or escaped away. test_no_heredoc_in_command_substitution
+  # guards the structure that makes it safe.
+  assert_grep "autopilot's authority check" "$brief" \
+    "no-mistakes DOD lost the apostrophe prose that the structural fix makes parse-safe"
+  pass "ap-brief.sh: no-mistakes DOD keeps its apostrophe prose, now parse-safe"
+}
+
+test_flight_project_memory_wording() {
+  local home id brief
+  home="$TMP_ROOT/project-memory-home"
+  mkdir -p "$home/data"
+  id="brief-memory-c1"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" some-proj >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_present "$brief" "brief was not scaffolded"
+  assert_grep "Record only project knowledge useful to almost every future session." "$brief" \
+    "project-memory contract lost the durable-knowledge bar"
+  assert_grep "prefer a pointer to the authoritative file, command, or doc over copying the detail" "$brief" \
+    "project-memory contract lost pointer-over-copy guidance"
+  assert_grep "lacks \`## Maintaining this file\`, add that short self-governance section" "$brief" \
+    "project-memory contract lost the self-governance add-in-same-pass rule"
+  pass "ap-brief.sh: flight project-memory wording carries the AGENTS.md authoring bar"
+}
+
+test_herdr_lab_contract_is_explicit_and_complete() {
+  local home id brief
+  home="$TMP_ROOT/herdr-lab-home"
+  mkdir -p "$home/data"
+  id="brief-herdr-lab-d1"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" autopilot --herdr-lab >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_present "$brief" "Herdr lab brief was not scaffolded"
+  assert_grep "# Herdr isolation - HARD SAFETY CONTRACT" "$brief" \
+    "Herdr lab brief missing its hard safety contract"
+  assert_grep "HERDR_LAB_HELPER='$ROOT/bin/ap-herdr-lab.sh'" "$brief" \
+    "Herdr lab brief must bind the absolute Autopilot helper path"
+  assert_grep "HERDR_LAB_SESSION=\$(\"\$HERDR_LAB_HELPER\" name $id)" "$brief" \
+    "Herdr lab brief missing helper-owned session naming"
+  assert_grep "\"\$HERDR_LAB_HELPER\" provision \"\$HERDR_LAB_SESSION\"" "$brief" \
+    "Herdr lab brief missing helper-owned provisioning"
+  assert_grep "\"\$HERDR_LAB_HELPER\" teardown \"\$HERDR_LAB_SESSION\"" "$brief" \
+    "Herdr lab brief missing helper-owned teardown"
+  assert_grep "required trailing \`--session \"\$HERDR_LAB_SESSION\"\`" "$brief" \
+    "Herdr lab brief missing the per-call trailing session contract"
+  assert_grep "direct \`herdr server stop\`" "$brief" \
+    "Herdr lab brief missing the forbidden server-global command list"
+  assert_grep "records the live default session before provisioning" "$brief" \
+    "Herdr lab brief missing the before tripwire"
+  assert_grep "verifies the identical fleet state after teardown" "$brief" \
+    "Herdr lab brief missing the after tripwire"
+  assert_no_grep "Herdr lifecycle declaration - NOT ENABLED" "$brief" \
+    "Herdr lab brief retained the unguarded declaration"
+  pass "ap-brief.sh: --herdr-lab emits the complete hard safety contract"
+}
+
+test_herdr_lab_contract_quotes_foreign_autopilot_path() {
+  local home id brief foreign_root helper
+  home="$TMP_ROOT/herdr-lab-foreign-home"
+  foreign_root="$TMP_ROOT/autopilot helper's root"
+  mkdir -p "$home/data"
+  id="brief-herdr-lab-foreign-d2"
+  helper=$(printf '%s' "$foreign_root/bin/ap-herdr-lab.sh" | sed "s/'/'\\\\''/g")
+  helper="'$helper'"
+  AP_HOME="$home" AP_ROOT_OVERRIDE="$foreign_root" "$ROOT/bin/ap-brief.sh" "$id" foreign --recon --herdr-lab >/dev/null 2>&1
+  brief="$home/data/$id/brief.md"
+  assert_grep "HERDR_LAB_HELPER=$helper" "$brief" \
+    "Herdr lab brief must shell-quote an absolute Autopilot helper path"
+  assert_no_grep "bin/ap-herdr-lab.sh name $id" "$brief" \
+    "Herdr lab brief must not invoke a worktree-relative helper"
+  pass "ap-brief.sh: --herdr-lab uses its quoted Autopilot-owned helper path"
+}
+
+test_herdr_lab_omission_is_loud_for_flight_and_recon() {
+  local home id brief
+  home="$TMP_ROOT/herdr-gate-home"
+  mkdir -p "$home/data"
+  for kind in flight recon; do
+    id="brief-herdr-gate-$kind"
+    if [ "$kind" = recon ]; then
+      AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" autopilot --recon >/dev/null 2>&1
+    else
+      AP_HOME="$home" "$ROOT/bin/ap-brief.sh" "$id" autopilot >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_grep "# Herdr lifecycle declaration - NOT ENABLED" "$brief" \
+      "$kind brief silently omitted the Herdr declaration"
+    assert_grep "regenerate the brief with \`--herdr-lab\` before dispatch" "$brief" \
+      "$kind brief missing the fail-visible regeneration instruction"
+  done
+  pass "ap-brief.sh: flight and recon scaffolds make omitted Herdr intent fail-visible"
+}
+
+test_copilot_no_projects_charter() {
+  local home brief status
+  home="$TMP_ROOT/no-projects-home"
+  mkdir -p "$home/data"
+
+  # The deliberate --no-projects signal scaffolds a valid project-less charter for
+  # a domain whose subject is the autopilot repo itself (no clones needed).
+  AP_HOME="$home" AP_COPILOT_CHARTER='autopilot self-development' \
+    AP_COPILOT_SCOPE='autopilot repo work' \
+    "$ROOT/bin/ap-brief.sh" fdev --copilot --no-projects >/dev/null 2>&1; status=$?
+  expect_code 0 "$status" "--no-projects copilot brief should exit 0"
+  brief="$home/data/fdev/brief.md"
+  assert_present "$brief" "project-less charter was not scaffolded"
+  assert_grep "# Project clones" "$brief" "project-less charter dropped the Project clones heading"
+  assert_grep "None. This is a project-less domain" "$brief" \
+    "project-less charter did not render a sensible no-clones note"
+  assert_grep "its crews take pooled worktrees of that repo" "$brief" \
+    "project-less charter operating model lost the pooled-worktree note"
+  assert_no_grep "The projects above are local clones" "$brief" \
+    "project-less charter kept the with-projects operating-model line"
+  assert_grep 'working [key=<work-slug>]' "$brief" \
+    "copilot charter did not key material routed-work phases"
+  assert_grep 'resolved [key=<work-slug>]' "$brief" \
+    "copilot charter did not close a quietly ended routed-work phase"
+  assert_grep 'use the same key on its later' "$brief" \
+    "copilot charter did not supersede working phases with later states"
+  if grep -nE '^-[[:space:]]*$' "$brief" >/dev/null; then
+    fail "project-less charter left a stray empty project bullet"
+  fi
+
+  # Accidental omission (no projects, no signal) still fails loudly, writing nothing.
+  AP_HOME="$home" AP_COPILOT_CHARTER='x' "$ROOT/bin/ap-brief.sh" oops --copilot >/dev/null 2>&1; status=$?
+  expect_code 1 "$status" "copilot brief with no projects and no --no-projects must fail"
+  assert_absent "$home/data/oops/brief.md" "loud-failure copilot brief still wrote a file"
+
+  # --no-projects is mutually exclusive with a project list.
+  AP_HOME="$home" AP_COPILOT_CHARTER='x' "$ROOT/bin/ap-brief.sh" oops2 --copilot --no-projects alpha >/dev/null 2>&1; status=$?
+  expect_code 1 "$status" "--no-projects combined with a project list must fail"
+
+  # --no-projects applies only to copilot charters, never a flight/recon brief.
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" oops3 somerepo --no-projects >/dev/null 2>&1; status=$?
+  expect_code 1 "$status" "--no-projects on a flight brief must fail"
+
+  pass "ap-brief.sh: --no-projects scaffolds a project-less charter and guards misuse"
+}
+
+test_copilot_marked_request_reporting_contract() {
+  local home brief
+  home="$TMP_ROOT/marked-request-reporting-home"
+  mkdir -p "$home/data"
+  AP_HOME="$home" AP_CLASSIFY_PAUSED_VERB=paused \
+    AP_COPILOT_CHARTER='Handle routed domain work.' \
+    "$ROOT/bin/ap-brief.sh" marked-request-reporting --copilot --no-projects >/dev/null 2>&1
+  brief="$home/data/marked-request-reporting/brief.md"
+
+  assert_grep 'A marked request requires one correlated answer after the work' "$brief" \
+    "copilot charter did not require the correlated answer after the work"
+  assert_grep 'does not require a separate receipt or start acknowledgement' "$brief" \
+    "copilot charter did not reject a separate receipt/start acknowledgement"
+  assert_grep "Never append \`working:\` merely to acknowledge receipt or announce that a marked request has started." "$brief" \
+    "copilot charter did not forbid a generic working acknowledgement"
+  assert_no_grep "Give every routed-work phase a stable key: open it with \`working" "$brief" \
+    "copilot charter retained the unconditional working opener"
+  assert_grep 'When a routed-work phase has a supervisor-actionable material change worth reporting under the rule above' "$brief" \
+    "copilot charter did not limit keyed phases to reportable material changes"
+  assert_grep "If its first reportable event is \`working [key=<work-slug>]: {material phase}\`" "$brief" \
+    "copilot charter lost keyed working syntax for a reportable material phase"
+  assert_grep "use the same key on its later \`paused\`, \`done\`, \`failed\`, \`needs-decision\`, or \`blocked\` event" "$brief" \
+    "copilot charter lost same-key closure for a reportable material phase"
+  assert_grep 'resolved [key=<work-slug>]' "$brief" \
+    "copilot charter lost resolved closure for a keyed material phase"
+
+  assert_grep 'include that exact token in your parent status reply' "$brief" \
+    "copilot charter lost correlated parent results"
+  assert_grep 'For a terse result, a status line is the whole answer.' "$brief" \
+    "copilot charter lost terse result reporting"
+  assert_grep 'append a status line that points to that doc' "$brief" \
+    "copilot charter lost detailed document pointers"
+  assert_grep 'Report only true pilot-relevant outcomes or a declared external wait' "$brief" \
+    "copilot charter lost declared external waits"
+  assert_grep 'a pilot decision, a real blocker, a failure, or work ready for review' "$brief" \
+    "copilot charter lost decisions, blockers, failures, or ready outcomes"
+  assert_grep 'States: working, needs-decision, blocked, paused, done, failed.' "$brief" \
+    "copilot charter changed the preserved status vocabulary"
+  pass "ap-brief.sh: marked requests avoid generic acknowledgements and preserve material reporting"
+}
+
+test_copilot_directory_paths_are_absolute_and_output_is_stable() {
+  local root home data_override state_override brief baseline err status
+  root="$TMP_ROOT/relative-directory-inputs"
+  mkdir -p "$root"
+  root=$(cd "$root" && pwd -P)
+  home="$root/home"
+  data_override="$root/data-override"
+  state_override="$root/state-override"
+  mkdir -p "$home/data" "$home/state" "$data_override" "$state_override" \
+    "$root/cdpath/home/data" "$root/cdpath/home/state" \
+    "$root/cdpath/data-override" "$root/cdpath/state-override"
+
+  brief="$home/data/relative-home/brief.md"
+  AP_HOME="$home" AP_COPILOT_CHARTER=x \
+    "$ROOT/bin/ap-brief.sh" relative-home --copilot --no-projects >/dev/null 2>&1
+  baseline="$root/absolute-home-charter"
+  cp "$brief" "$baseline"
+  rm -f "$brief"
+  (
+    cd "$root" || exit 1
+    CDPATH="$root/cdpath" AP_HOME=home AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" relative-home --copilot --no-projects >/dev/null 2>&1
+  )
+  cmp -s "$baseline" "$brief" \
+    || fail "relative AP_HOME changed charter bytes compared with the same absolute home"
+  assert_grep ">> '$home/state/relative-home.status'" "$brief" \
+    "relative AP_HOME did not render an absolute copilot status path"
+
+  brief="$home/data/relative-state/brief.md"
+  AP_HOME="$home" AP_STATE_OVERRIDE="$state_override" AP_COPILOT_CHARTER=x \
+    "$ROOT/bin/ap-brief.sh" relative-state --copilot --no-projects >/dev/null 2>&1
+  baseline="$root/absolute-state-charter"
+  cp "$brief" "$baseline"
+  rm -f "$brief"
+  (
+    cd "$root" || exit 1
+    CDPATH="$root/cdpath" AP_HOME="$home" AP_STATE_OVERRIDE=state-override AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" relative-state --copilot --no-projects >/dev/null 2>&1
+  )
+  cmp -s "$baseline" "$brief" \
+    || fail "relative AP_STATE_OVERRIDE changed charter bytes compared with the same absolute state directory"
+  assert_grep ">> '$state_override/relative-state.status'" "$brief" \
+    "relative AP_STATE_OVERRIDE did not render an absolute copilot status path"
+
+  brief="$data_override/relative-data/brief.md"
+  AP_HOME="$home" AP_DATA_OVERRIDE="$data_override" AP_COPILOT_CHARTER=x \
+    "$ROOT/bin/ap-brief.sh" relative-data --copilot --no-projects >/dev/null 2>&1
+  baseline="$root/absolute-data-charter"
+  cp "$brief" "$baseline"
+  rm -f "$brief"
+  (
+    cd "$root" || exit 1
+    CDPATH="$root/cdpath" AP_HOME="$home" AP_DATA_OVERRIDE=data-override AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" relative-data --copilot --no-projects >/dev/null 2>&1
+  )
+  cmp -s "$baseline" "$brief" \
+    || fail "relative AP_DATA_OVERRIDE changed charter bytes compared with the same absolute data directory"
+  assert_grep ">> '$home/state/relative-data.status'" "$brief" \
+    "relative AP_DATA_OVERRIDE changed the absolute default status path"
+
+  err="$root/unresolved.err"
+  (
+    cd "$root" || exit 1
+    AP_HOME=missing-home AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" unresolved-home --copilot --no-projects >/dev/null 2>"$err"
+  ); status=$?
+  expect_code 1 "$status" "an unresolved relative AP_HOME must fail"
+  assert_grep "AP_HOME directory cannot be resolved: missing-home" "$err" \
+    "unresolved relative AP_HOME did not fail loudly"
+
+  (
+    cd "$root" || exit 1
+    AP_HOME="$home" AP_STATE_OVERRIDE=missing-state AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" unresolved-state --copilot --no-projects >/dev/null 2>"$err"
+  ); status=$?
+  expect_code 1 "$status" "an unresolved relative AP_STATE_OVERRIDE must fail"
+  assert_grep "AP_STATE_OVERRIDE directory cannot be resolved: missing-state" "$err" \
+    "unresolved relative AP_STATE_OVERRIDE did not fail loudly"
+
+  (
+    cd "$root" || exit 1
+    AP_HOME="$home" AP_DATA_OVERRIDE=missing-data AP_COPILOT_CHARTER=x \
+      "$ROOT/bin/ap-brief.sh" unresolved-data --copilot --no-projects >/dev/null 2>"$err"
+  ); status=$?
+  expect_code 1 "$status" "an unresolved relative AP_DATA_OVERRIDE must fail"
+  assert_grep "AP_DATA_OVERRIDE directory cannot be resolved: missing-data" "$err" \
+    "unresolved relative AP_DATA_OVERRIDE did not fail loudly"
+
+  pass "ap-brief.sh: relative directory inputs ignore CDPATH, render stable absolute charter paths, or fail loudly"
+}
+
+test_herdr_lab_contract_applies_to_recons_but_not_copilots() {
+  local home brief status=0
+  home="$TMP_ROOT/herdr-kind-home"
+  mkdir -p "$home/data"
+  AP_HOME="$home" "$ROOT/bin/ap-brief.sh" herdr-recon autopilot --recon --herdr-lab >/dev/null 2>&1
+  brief="$home/data/herdr-recon/brief.md"
+  assert_grep "# Herdr isolation - HARD SAFETY CONTRACT" "$brief" \
+    "recon --herdr-lab brief missing the contract"
+
+  AP_HOME="$home" AP_COPILOT_CHARTER=ops "$ROOT/bin/ap-brief.sh" herdr-copilot --copilot autopilot --herdr-lab >/dev/null 2>&1 || status=$?
+  expect_code 1 "$status" "copilot --herdr-lab must be rejected"
+  assert_absent "$home/data/herdr-copilot/brief.md" \
+    "rejected copilot --herdr-lab still wrote a brief"
+  pass "ap-brief.sh: Herdr lab contract covers recon tasks and rejects copilot misuse"
+}
+
+test_pause_verb_override_renders_all_brief_scaffolds() {
+  local home kind id brief
+  home="$TMP_ROOT/pause-verb-home"
+  mkdir -p "$home/data"
+
+  for kind in flight recon copilot; do
+    id="brief-pause-verb-$kind"
+    case "$kind" in
+      flight)
+        AP_HOME="$home" AP_CLASSIFY_PAUSED_VERB=awaiting \
+          "$ROOT/bin/ap-brief.sh" "$id" autopilot >/dev/null 2>&1
+        ;;
+      recon)
+        AP_HOME="$home" AP_CLASSIFY_PAUSED_VERB=awaiting \
+          "$ROOT/bin/ap-brief.sh" "$id" autopilot --recon >/dev/null 2>&1
+        ;;
+      copilot)
+        AP_HOME="$home" AP_CLASSIFY_PAUSED_VERB=awaiting \
+          "$ROOT/bin/ap-brief.sh" "$id" --copilot --no-projects >/dev/null 2>&1
+        ;;
+    esac
+    brief="$home/data/$id/brief.md"
+    assert_grep "States: working, needs-decision, blocked, awaiting, done, failed." "$brief" \
+      "$kind brief did not render the configured pause verb in its states list"
+    # shellcheck disable=SC2016 # Literal backticks and braces must remain unexpanded.
+    assert_grep 'Use `awaiting: {why}`' "$brief" \
+      "$kind brief did not instruct the configured pause status"
+    # shellcheck disable=SC2016 # Literal backticks and braces must remain unexpanded.
+    assert_no_grep '`paused: {why}`' "$brief" \
+      "$kind brief still instructs the default paused status"
+    assert_grep 'or a blocker clears' "$brief" \
+      "$kind brief did not require durable resolution when a blocker clears"
+  done
+  pass "ap-brief.sh: custom pause verb renders in every scaffold"
+}
+
+test_recon_and_copilot_load_decision_hold_policy() {
+  local home recon charter
+  home="$TMP_ROOT/decision-policy-home"
+  mkdir -p "$home/data"
+  AP_HOME="$home" AP_ROOT_OVERRIDE="$ROOT" \
+    "$ROOT/bin/ap-brief.sh" sample-investigation sample --recon >/dev/null 2>&1
+  recon="$home/data/sample-investigation/brief.md"
+  assert_grep "$ROOT/.agents/skills/decision-hold-lifecycle/SKILL.md" "$recon" \
+    "recon brief did not load the unresolved-decision policy before done"
+  assert_grep "pass its shared completion gate for the report and any visual review" "$recon" \
+    "recon brief did not cross-reference visual-review completion"
+  AP_HOME="$home" AP_ROOT_OVERRIDE="$ROOT" AP_COPILOT_CHARTER='sample reviews' \
+    "$ROOT/bin/ap-brief.sh" sample-copilot --copilot --no-projects >/dev/null 2>&1
+  charter="$home/data/sample-copilot/brief.md"
+  assert_grep "load \`decision-hold-lifecycle\`" "$charter" \
+    "copilot charter did not load the shared decision policy for detailed investigations"
+  pass "ap-brief.sh: investigation and visual-review completions load the shared decision policy"
+}
+
+# Recon and copilot paths still scaffold well-formed briefs.
+test_recon_and_copilot_scaffold() {
+  local brief
+  AP_HOME="$BRIEF_HOME" "$ROOT/bin/ap-brief.sh" brief-recon-q6 alpha --recon >/dev/null 2>&1 \
+    || fail "ap-brief.sh recon scaffold exited non-zero"
+  brief="$BRIEF_HOME/data/brief-recon-q6/brief.md"
+  assert_present "$brief" "recon brief was not scaffolded"
+  assert_grep "RECON task" "$brief" "recon brief must declare itself a recon task"
+  assert_grep "report.md" "$brief" "recon brief must point at the report deliverable"
+
+  AP_COPILOT_CHARTER='Supervise the alpha domain.' \
+    AP_HOME="$BRIEF_HOME" "$ROOT/bin/ap-brief.sh" brief-copilot-q6 --copilot alpha >/dev/null 2>&1 \
+    || fail "ap-brief.sh copilot scaffold exited non-zero"
+  brief="$BRIEF_HOME/data/brief-copilot-q6/brief.md"
+  assert_present "$brief" "copilot charter was not scaffolded"
+  assert_grep "persistent copilot" "$brief" \
+    "copilot charter must declare its role"
+  pass "ap-brief: recon and copilot code paths still scaffold well-formed briefs"
+}
+
+test_script_parses
+test_no_heredoc_in_command_substitution
+test_help_includes_entire_header
+test_flight_modes_generate_clean_briefs
+test_faster_paths_use_configured_authority_without_stacked_review
+test_no_mistakes_dod_wording
+test_flight_project_memory_wording
+test_herdr_lab_contract_is_explicit_and_complete
+test_herdr_lab_contract_quotes_foreign_autopilot_path
+test_herdr_lab_omission_is_loud_for_flight_and_recon
+test_herdr_lab_contract_applies_to_recons_but_not_copilots
+test_copilot_no_projects_charter
+test_copilot_marked_request_reporting_contract
+test_copilot_directory_paths_are_absolute_and_output_is_stable
+test_pause_verb_override_renders_all_brief_scaffolds
+test_recon_and_copilot_load_decision_hold_policy
+test_recon_and_copilot_scaffold
