@@ -87,7 +87,7 @@ Rules that keep the contract unambiguous:
 - The strict boundary keeps action-free items OUT of Pilot's Call: a working or validating task, a queued item blocked on another task or a date, landed work, a completed recon's report pointer, a declared `paused:` external wait, and a bare recorded PR with no merge-ready signal each belong to one of the other three sections, never Pilot's Call.
 - A copilot's own row appears Underway only for `active_child_work`; `externally_held` belongs in Charted Next, and `unknown` belongs there as an unavailable-state gate unless its reason requires the pilot's action.
 - Do not suppress separately projected decisions, landed records, or gates from a `partial-structured` home merely because that copilot's own row is `unknown`.
-- Include the required direct address to the pilot inside one item or empty-state sentence.
+- Include the required direct address as "Captain" inside one item or empty-state sentence.
 - Every PR appears as the full `https://...` URL; a shorthand `#number` is fine only as a back-reference after the full URL has already appeared in the same digest.
 - The chat follows `AGENTS.md` section 9 and carries one scannable line per item.
 - Detailed decisions, plans, full gate reasons, and evidence belong in the file only when file mode is explicit, so plain chat stays concise and file-mode chat stays materially shorter than that file.
