@@ -45,7 +45,7 @@ This touches only the autopilot repo and its own worktrees, never anything under
 
 4. **Report to the pilot in plain outcomes.**
    Summarize what landed under `AGENTS.md` section 9 without autopilot's internal vocabulary: which parts of the fleet are now on the latest, and which were left as-is and why.
-   For example: "Pilot, autopilot and both copilots are now on the latest."
+   For example: "Captain, autopilot and both copilots are now on the latest."
    Surface any skipped target whose reason needs the pilot's attention - for instance a home with its own un-landed changes (diverged) or local edits (dirty), which were left untouched on purpose.
 
 ## Safety

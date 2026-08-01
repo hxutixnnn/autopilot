@@ -105,7 +105,7 @@ The preference persists for the effective Autopilot home, and toggling it off re
 # clones the project under projects/ and spawns two isolated workers in the active backend.
 # Minutes later:
 
-  PR ready for review, pilot: https://github.com/you/xyz/pull/42
+  PR ready for review, Captain: https://github.com/you/xyz/pull/42
   (fix flaky login test - risk: low - CI green)
 
 > alright merge it
