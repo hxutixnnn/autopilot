@@ -685,8 +685,14 @@ families_for_changed_path() {
     bin/ap-ff-lib.sh|bin/ap-gotmp*|bin/*pretool*)
       printf '%s\n' pure-contract-unit
       ;;
-    .agents/skills/*/SKILL.md)
+    .agents/skills/*/SKILL.md|.agents/skills/*/agents/*)
       printf '%s\n' pure-contract-unit
+      ;;
+    .claude/*|.codex/*|.grok/*|.opencode/*|.pi/*)
+      # Hidden harness integrations should select every suite that names the
+      # exact source path. Newly added adapter files without a consumer yet
+      # still receive the portable contract family rather than failing closed.
+      families_for_test_reference "$path" || printf '%s\n' pure-contract-unit
       ;;
     .github/workflows/ci.yml|.no-mistakes.yaml)
       printf '%s\n' pure-contract-unit

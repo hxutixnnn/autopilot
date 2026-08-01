@@ -67,7 +67,7 @@ It never tears down a task, merges a PR, dispatches new work, steers a worker, a
 ## Chat-response contract
 
 This skill is the one owner of the `/bearings` chat-response format; the snapshot and classifier own the data that feeds it, and no other file restates this contract.
-Every `/bearings` chat response renders EXACTLY these four sections, in THIS order, and nothing else structural (there is no At Anchor section):
+Every `/bearings` chat response renders EXACTLY these four sections, in THIS order, with no fifth section or other structural content:
 
 1. **Pilot's Call** - ONLY items that need the pilot's own action now: a decision to make, a PR to approve or merge, a credential or login to provide, or a blocker only the pilot can clear.
    Empty-state: "Nothing needs your action right now."

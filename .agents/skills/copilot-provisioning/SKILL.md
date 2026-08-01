@@ -60,6 +60,7 @@ It may only seed a home with no project clones or project-registry entries, and 
 The lease survives with no live process and is never recycled by later `treehouse get` or `prune`.
 The slot stays reserved across restarts until the lease is released.
 Release happens only on explicit retirement or seed rollback, never on routine restart or recovery.
+When an explicit home path does not exist, seeding creates a standalone clone directly from the canonical `https://github.com/hxutixnnn/autopilot.git` origin; `-` continues to allocate a linked local worktree so primary-checkout commits can fan out without a network fetch.
 
 `bin/ap-home-seed.sh` copies the charter into the copilot home as `data/charter.md`.
 It also writes the required `.ap-copilot-home` identity marker, which is gitignored and must remain in place for home validation.

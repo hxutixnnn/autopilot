@@ -120,9 +120,11 @@ init_changed_fixture_repo() {
   printf '# .claude/settings.json\n# .pi/extensions/ap-primary-turnend-guard.ts\n' \
     >>"$repo/tests/ap-cd-pretool-check.test.sh"
   printf '# .pi/extensions/ap-primary-pi-watch.ts\n' >>"$repo/tests/ap-pi-watch-extension.test.sh"
-  mkdir -p "$repo/.agents/skills/example" "$repo/.claude" "$repo/.pi/extensions" "$repo/src"
+  mkdir -p "$repo/.agents/skills/example/agents" "$repo/.claude" "$repo/.grok/hooks" "$repo/.pi/extensions" "$repo/src"
   : >"$repo/.agents/skills/example/SKILL.md"
+  : >"$repo/.agents/skills/example/agents/openai.yaml"
   : >"$repo/.claude/settings.json"
+  : >"$repo/.grok/hooks/new-adapter.json"
   : >"$repo/.pi/extensions/ap-primary-pi-watch.ts"
   : >"$repo/.pi/extensions/ap-primary-turnend-guard.ts"
   : >"$repo/src/unmapped.ts"
@@ -160,6 +162,7 @@ test_changed_dependency_selection_and_unmapped_failure() {
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm supervisor-change
 
   printf '\n' >>"$repo/.agents/skills/example/SKILL.md"
+  printf '\n' >>"$repo/.agents/skills/example/agents/openai.yaml"
   printf '\n' >>"$repo/.claude/settings.json"
   printf '\n' >>"$repo/.pi/extensions/ap-primary-pi-watch.ts"
   printf '\n' >>"$repo/.pi/extensions/ap-primary-turnend-guard.ts"
@@ -169,6 +172,13 @@ test_changed_dependency_selection_and_unmapped_failure() {
   assert_contains "$listed" "tests/ap-pi-watch-extension.test.sh" "Pi source selects watcher coverage"
   git -C "$repo" add .agents .claude .pi
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm non-bin-source-change
+
+  printf '\n' >>"$repo/.grok/hooks/new-adapter.json"
+  listed=$(cd "$repo" && bin/ap-test-run.sh --list --changed --base HEAD)
+  assert_contains "$listed" "tests/ap-ask-user-authority.test.sh" \
+    "unreferenced hidden adapter source selects portable contract coverage"
+  git -C "$repo" add .grok
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm hidden-adapter-change
 
   printf '\n' >>"$repo/src/unmapped.ts"
   set +e
