@@ -492,8 +492,7 @@ ensure_home() {
     [ -d "$home" ] || { echo "error: $home exists and is not a directory" >&2; return 1; }
   else
     mkdir -p "$(dirname "$home")"
-    git clone --quiet "$AP_ROOT" "$home"
-    git -C "$home" remote set-url origin https://github.com/hxutixnnn/autopilot.git
+    git clone --quiet https://github.com/hxutixnnn/autopilot.git "$home"
   fi
   verify_autopilot_home "$home"
 }

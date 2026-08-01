@@ -12,6 +12,9 @@ set -u
 
 TMP_ROOT=$(ap_test_tmproot ap-copilot-safety)
 export AP_BACKEND=tmux
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0="url.$ROOT.insteadOf"
+export GIT_CONFIG_VALUE_0=https://github.com/hxutixnnn/autopilot.git
 
 file_mode() {
   if [ "$(uname)" = Darwin ]; then
@@ -66,6 +69,29 @@ test_lock_status_is_per_home() {
   out=$(AP_HOME="$home_two" "$ROOT/bin/ap-lock.sh" status)
   [ "$out" = "lock: free" ] || fail "home two lock status was affected by home one"
   pass "ap-lock status is scoped per home"
+}
+
+test_home_seed_clones_canonical_origin_not_local_root() {
+  local home local_root copilot_home origin
+  home="$TMP_ROOT/canonical-main"
+  local_root="$TMP_ROOT/canonical-local-root"
+  copilot_home="$TMP_ROOT/canonical-copilot"
+  mkdir -p "$home/data" "$home/projects" "$home/state"
+  git clone --quiet "$ROOT" "$local_root"
+  printf 'local only\n' > "$local_root/local-only.txt"
+  git -C "$local_root" add local-only.txt
+  git -C "$local_root" -c user.name='Autopilot Tests' -c user.email='tests@example.invalid' commit -qm local-only
+
+  AP_ROOT_OVERRIDE="$local_root" AP_HOME="$home" AP_COPILOT_CHARTER='canonical origin scope' \
+    AP_COPILOT_SCOPE='canonical origin scope' \
+    "$ROOT/bin/ap-home-seed.sh" canonical "$copilot_home" --no-projects >/dev/null \
+    || fail "standalone canonical seed failed"
+
+  [ ! -e "$copilot_home/local-only.txt" ] || fail "standalone seed imported local Autopilot history"
+  origin=$(git -C "$copilot_home" config --get remote.origin.url)
+  [ "$origin" = https://github.com/hxutixnnn/autopilot.git ] \
+    || fail "standalone seed did not retain the canonical Autopilot origin"
+  pass "standalone home clones canonical origin without local history"
 }
 
 test_seed_allows_overlapping_clones_and_drops_owner() {
@@ -2166,6 +2192,7 @@ EOF
 
 test_ap_home_parameterization
 test_lock_status_is_per_home
+test_home_seed_clones_canonical_origin_not_local_root
 test_seed_allows_overlapping_clones_and_drops_owner
 test_home_seed_validate_rejects_duplicate_homes
 test_home_seed_validate_rejects_duplicate_ids

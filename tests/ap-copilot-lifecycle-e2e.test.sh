@@ -29,6 +29,9 @@ set -u
 
 TMP_ROOT=$(ap_test_tmproot ap-copilot-lifecycle)
 export AP_BACKEND=tmux
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0="url.$ROOT.insteadOf"
+export GIT_CONFIG_VALUE_0=https://github.com/hxutixnnn/autopilot.git
 
 HOME_DIR="$TMP_ROOT/main home"
 SUB="$TMP_ROOT/design-home"
@@ -79,7 +82,7 @@ phase_seed() {
   assert_present "$SUB/.ap-copilot-home" "seed did not mark the copilot home"
   assert_present "$SUB/data/charter.md" "seed did not copy the charter into the copilot home"
   assert_grep 'customer onboarding charter' "$SUB/data/charter.md" "charter body was not copied verbatim"
-  case "$(git -C "$SUB" remote get-url origin)" in
+  case "$(git -C "$SUB" config --get remote.origin.url)" in
     https://github.com/hxutixnnn/autopilot.git|git@github.com:hxutixnnn/autopilot.git) ;;
     *) fail "copilot home did not retain a canonical Autopilot update source" ;;
   esac
